@@ -38,13 +38,12 @@ def pipe(args):
     cmd2 = args[args.index('|') + 1:]
 
     pr,pw = os.pipe()   # Pair of fds for reading and writing
-
-    rc = os.fork()
-
-    if rc < 0:
+    rc1, rc2 = os.fork(), os.fork()   # Fork off two children
+    
+    if rc1 < 0 or rc2 < 0:
         os.write(2, ("fork failed, returning %d\n" % rc).encode())
         sys.exit(1)
-    elif rc == 0:
+    elif rc1 == 0 and rc2 > 0:   # Child 1
         os.close(1)   # Disconnect fd1 from display
         os.dup(pw)
         os.set_inheritable(1,True)
@@ -54,9 +53,10 @@ def pipe(args):
             os.close(fd)
 
         execute(cmd1)
+        time.sleep(1)
         os.write(2, (f"{cmd1}: could not execute\n").encode())
         sys.exit(1)
-    else:
+    elif rc1 > 0 and rc2 == 0:   # Child 2
         os.close(0)   # Disconnect stdin
         os.dup(pr)
         os.set_inheritable(0,True)
@@ -64,12 +64,16 @@ def pipe(args):
         for fd in (pw,pr):
             os.close(fd)
 
+        # Handle Two Pipes
         if '|' in cmd2:
             pipe(cmd2)
 
         execute(cmd2)
+        time.sleep(1)
         os.write(2, (f"{cmd1}: could not execute\n").encode())
         sys.exit(1)
+    elif rc1 > 0 and rc2 > 0:
+        os.wait()
         
 def execute(args):
     if '/' in args[0]:
