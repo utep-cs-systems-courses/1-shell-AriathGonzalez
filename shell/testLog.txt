@@ -5,7 +5,7 @@ PASSED: no parameter, no pathname
 PASSED: one parameter, full pathname
 PASSED: one parameter, no pathname
 PASSED: pipe
-PASSED: 2 pipes
+FAILED: 2 pipes
 PASSED: redirect input
 PASSED: redirect output
 PASSED: background

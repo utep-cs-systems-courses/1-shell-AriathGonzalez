@@ -36,14 +36,15 @@ def runCommand(args):
 def pipe(args):
     cmd1 = args[0:args.index('|')]
     cmd2 = args[args.index('|') + 1:]
-
-    pr,pw = os.pipe()   # Pair of fds for reading and writing
-    rc1, rc2 = os.fork(), os.fork()   # Fork off two children
     
-    if rc1 < 0 or rc2 < 0:
+    pr,pw = os.pipe()   # Pair of fds for reading and writing
+    
+    rc1 = os.fork()  
+    
+    if rc1 < 0:
         os.write(2, ("fork failed, returning %d\n" % rc).encode())
         sys.exit(1)
-    elif rc1 == 0 and rc2 > 0:   # Child 1
+    elif rc1 == 0:   # First Child
         os.close(1)   # Disconnect fd1 from display
         os.dup(pw)
         os.set_inheritable(1,True)
@@ -53,28 +54,28 @@ def pipe(args):
             os.close(fd)
 
         execute(cmd1)
-        time.sleep(1)
         os.write(2, (f"{cmd1}: could not execute\n").encode())
         sys.exit(1)
-    elif rc1 > 0 and rc2 == 0:   # Child 2
-        os.close(0)   # Disconnect stdin
-        os.dup(pr)
-        os.set_inheritable(0,True)
+    else:
+        rc2 = os.fork()
+        if rc2 < 0:
+            os.write(2, ("fork failed, returning %d\n" % rc).encode())
+            sys.exit(1)
+        elif rc2 == 0:   # Second Child
+            os.close(0)   # Disconnect stdin
+            os.dup(pr)
+            os.set_inheritable(0,True)
 
-        for fd in (pw,pr):
-            os.close(fd)
+            for fd in (pw,pr):
+                os.close(fd)
 
-        # Handle Two Pipes
-        if '|' in cmd2:
-            pipe(cmd2)
-
-        execute(cmd2)
-        time.sleep(1)
-        os.write(2, (f"{cmd1}: could not execute\n").encode())
-        sys.exit(1)
-    elif rc1 > 0 and rc2 > 0:
-        os.wait()
-        
+            execute(cmd2)
+            os.write(2, (f"{cmd1}: could not execute\n").encode())
+            sys.exit(1)
+        else:
+            childPidCode = os.wait()
+            sys.exit(1)
+    
 def execute(args):
     if '/' in args[0]:
         program = args[0]
