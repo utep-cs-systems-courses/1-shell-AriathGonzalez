@@ -38,6 +38,8 @@ def pipe(args):
     cmd2 = args[args.index('|') + 1:]
     
     pr,pw = os.pipe()   # Pair of fds for reading and writing
+
+    print ("Before forking 1st child: Parent:", os.getpid())
     
     rc1 = os.fork()  
     
@@ -45,6 +47,7 @@ def pipe(args):
         os.write(2, ("fork failed, returning %d\n" % rc).encode())
         sys.exit(1)
     elif rc1 == 0:   # First Child
+        print ("First Child", os.getpid())
         os.close(1)   # Disconnect fd1 from display
         os.dup(pw)
         os.set_inheritable(1,True)
@@ -52,16 +55,20 @@ def pipe(args):
         # Disconnect extra connections to pipe
         for fd in (pr,pw):
             os.close(fd)
+            
 
+        os.write(2, (f"{cmd1}").encode())
         execute(cmd1)
         os.write(2, (f"{cmd1}: could not execute\n").encode())
         sys.exit(1)
-    else:
+    elif rc1 > 0:
+        print ("Forking second child", os.getpid())
         rc2 = os.fork()
         if rc2 < 0:
             os.write(2, ("fork failed, returning %d\n" % rc).encode())
             sys.exit(1)
         elif rc2 == 0:   # Second Child
+            print ("Second Child", os.getpid())
             os.close(0)   # Disconnect stdin
             os.dup(pr)
             os.set_inheritable(0,True)
@@ -73,10 +80,14 @@ def pipe(args):
             os.write(2, (f"{cmd1}: could not execute\n").encode())
             sys.exit(1)
         else:
-            childPidCode = os.wait()
-            sys.exit(1)
-    
+            os.wait()
+            sys.exit(0)
+    else:
+        os.wait()
+        sys.exit(0)
+        
 def execute(args):
+    os.write(2, (f"executing...\n").encode())
     if '/' in args[0]:
         program = args[0]
         try:
@@ -90,6 +101,7 @@ def execute(args):
 
         for dir in re.split(":", os.environ['PATH']): # try each directory in the path
             program = "%s/%s" % (dir, args[0])
+            os.write(2, (f"Trying {program}\n").encode())
             try:
                 os.execve(program, args, os.environ) # try to exec program
             except FileNotFoundError:             # ...expected
@@ -105,6 +117,7 @@ def redirection(args):
         os.close(0)   # Shell closes std input
         os.open(args[loc + 1], os.O_RDONLY)
         os.set_inheritable(0,True)
+        #wc < inputTest.txt 
         del args[loc:loc + 2]
     # Output
     else:
@@ -112,6 +125,7 @@ def redirection(args):
         os.close(1)   # Shell closes std output
         os.open(args[loc + 1], os.O_CREAT | os.O_WRONLY)
         os.set_inheritable(1,True)
+        #echo hello > testLog.txt
         del args[loc:loc + 2]
     return args
 
